@@ -7,6 +7,8 @@ import time
 import pandas as pd
 import argparse
 from datetime import datetime
+import random
+import numpy as np
 
 
 device=torch.device(
@@ -20,14 +22,27 @@ parser=argparse.ArgumentParser()
 parser.add_argument(
     "--mode",
     type=str,
-    choices=["baseline","aug"],
+    choices=["baseline","aug","flip"],
     default="baseline",
 )
 parser.add_argument(
     "--scheduler",
     action="store_true"
 )
+parser.add_argument(
+    "--seed",
+    type=int,
+    default=42
+)
 args=parser.parse_args()
+
+random.seed(args.seed)
+np.random.seed(args.seed)
+torch.manual_seed(args.seed)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(args.seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 output_path=project_dir/"outputs"
@@ -42,12 +57,12 @@ best_model_path = run_dir / "best_model.pth"
 
 train_loader, val_loader, classes, class_to_idx = get_data_loaders(
     data_dir,
-    batch_size=512,
+    batch_size=128,
     mode=args.mode
 )
 
 model=ResNet(num_class=len(classes)).to(device)
-loss_fn=nn.CrossEntropyLoss()
+loss_fn=nn.CrossEntropyLoss(label_smoothing=0.05)
 optimizer=torch.optim.SGD(
     model.parameters(),
     lr=0.1,
@@ -77,7 +92,7 @@ def evaluate(model,val_loader,loss_fn,device):
     val_acc=(total_correct/total_samples)*100
     return val_loss,val_acc
 
-num_epochs=30
+num_epochs=50
 best_val_acc=.0
 history=[]
 scheduler = None
